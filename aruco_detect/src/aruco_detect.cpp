@@ -70,8 +70,8 @@ class FiducialsNode {
     rclcpp::Publisher<fiducial_msgs::msg::FiducialArray>::SharedPtr vertices_pub;
     rclcpp::Publisher<fiducial_msgs::msg::FiducialTransformArray>::SharedPtr pose_pub;
 
-    //rclcpp::Subscription<sensor_msgs::msg::CameraInfo::ConstSharedPtr> caminfo_sub;
-    //rclcpp::Subscription<std_msgs::msg::String>::SharedPtr ignore_sub;
+    rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr caminfo_sub;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr ignore_sub;
     image_transport::ImageTransport it;
     image_transport::Subscriber img_sub;
     tf2_ros::TransformBroadcaster broadcaster;
@@ -95,7 +95,7 @@ class FiducialsNode {
     std::vector<int> ignoreIds;
     std::map<int, double> fiducialLens;
     rclcpp::Node::SharedPtr nh;
-    rclcpp::Node::SharedPtr pnh;
+    rclcpp::Node::SharedPtr pnh = std::make_shared<rclcpp::Node>("~");
 
     image_transport::Publisher image_pub;
 
@@ -113,9 +113,9 @@ class FiducialsNode {
                                    vector<double>& reprojectionError);
 
 
-    void ignoreCallback(const std_msgs::msg::String &msg);
+    void ignoreCallback(const std_msgs::msg::String::SharedPtr msg);
     void imageCallback(const sensor_msgs::msg::Image::ConstSharedPtr &msg);
-    void camInfoCallback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr &msg);
+    void camInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg);
     //void configCallback(aruco_detect::DetectorParamsConfig &config, uint32_t level);
 
     bool enableDetectionsCallback(const std_srvs::srv::SetBool::Request &req,
@@ -283,14 +283,14 @@ void FiducialsNode::estimatePoseSingleMarkers(const vector<int> &ids,
 //     detectorParams->polygonalApproxAccuracyRate = config.polygonalApproxAccuracyRate;
 // }
 
-void FiducialsNode::ignoreCallback(const std_msgs::msg::String& msg)
+void FiducialsNode::ignoreCallback(const std_msgs::msg::String::SharedPtr msg)
 {
     ignoreIds.clear();
     //pnh.declare_parameter("ignore_fiducials", msg.data); // TODO ROS2 migrate
-    handleIgnoreString(msg.data);
+    handleIgnoreString(msg->data);
 }
 
-void FiducialsNode::camInfoCallback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr& msg)
+void FiducialsNode::camInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg)
 {
     if (haveCamInfo) {
         return;
@@ -501,7 +501,7 @@ bool FiducialsNode::enableDetectionsCallback(const std_srvs::srv::SetBool::Reque
 }
 
 
-FiducialsNode::FiducialsNode() : it(nh), broadcaster(nh) //TODO migrate
+FiducialsNode::FiducialsNode() : it(nh), broadcaster(nh)
 {
     frameNum = 0;
 
@@ -577,11 +577,11 @@ FiducialsNode::FiducialsNode() : it(nh), broadcaster(nh) //TODO migrate
 
     dictionary = aruco::getPredefinedDictionary(dicno);
 
-    // img_sub = it.subscribe("camera", 1,
+    //img_sub = it.subscribe("camera", 1,
     //                     &FiducialsNode::imageCallback, this);
 
-    // caminfo_sub = nh.subscribe("camera_info", 1,
-    //                 &FiducialsNode::camInfoCallback, this);
+    caminfo_sub = nh->create_subscription<sensor_msgs::msg::CameraInfo>("camera_info", 1,
+                     std::bind(&FiducialsNode::camInfoCallback, this, std::placeholders::_1));
 
     // ignore_sub = nh.create_subscription<std_msgs::msg::String>("ignore_fiducials", 1,
     //                                     std::bind(&FiducialsNode::ignoreCallback, this, std::placeholders::_1));
