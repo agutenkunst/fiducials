@@ -65,16 +65,17 @@
 using namespace std;
 using namespace cv;
 
-class FiducialsNode {
+class FiducialsNode
+{
   private:
     rclcpp::Publisher<fiducial_msgs::msg::FiducialArray>::SharedPtr vertices_pub;
     rclcpp::Publisher<fiducial_msgs::msg::FiducialTransformArray>::SharedPtr pose_pub;
 
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr caminfo_sub;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr ignore_sub;
-    image_transport::ImageTransport it;
+    std::shared_ptr<image_transport::ImageTransport> img_trans;
     image_transport::Subscriber img_sub;
-    tf2_ros::TransformBroadcaster broadcaster;
+    std::shared_ptr<tf2_ros::TransformBroadcaster> broadcaster;
 
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr service_enable_detections;
 
@@ -94,9 +95,10 @@ class FiducialsNode {
     std::string frameId;
     std::vector<int> ignoreIds;
     std::map<int, double> fiducialLens;
-    rclcpp::Node::SharedPtr nh;
-    rclcpp::Node::SharedPtr pnh = std::make_shared<rclcpp::Node>("~");
 
+public:
+    rclcpp::Node::SharedPtr nh;
+private:
     image_transport::Publisher image_pub;
 
     cv::Ptr<aruco::DetectorParameters> detectorParams;
@@ -118,8 +120,8 @@ class FiducialsNode {
     void camInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg);
     //void configCallback(aruco_detect::DetectorParamsConfig &config, uint32_t level);
 
-    bool enableDetectionsCallback(const std_srvs::srv::SetBool::Request &req,
-                                  std_srvs::srv::SetBool::Response &res);
+    bool enableDetectionsCallback(const std_srvs::srv::SetBool::Request::SharedPtr req,
+                                  std_srvs::srv::SetBool::Response::SharedPtr res);
 
     //dynamic_reconfigure::Server<aruco_detect::DetectorParamsConfig> configServer;
     //dynamic_reconfigure::Server<aruco_detect::DetectorParamsConfig>::CallbackType callbackType;
@@ -286,7 +288,7 @@ void FiducialsNode::estimatePoseSingleMarkers(const vector<int> &ids,
 void FiducialsNode::ignoreCallback(const std_msgs::msg::String::SharedPtr msg)
 {
     ignoreIds.clear();
-    //pnh.declare_parameter("ignore_fiducials", msg.data); // TODO ROS2 migrate
+    //this.declare_parameter("ignore_fiducials", msg.data); // TODO ROS2 migrate
     handleIgnoreString(msg->data);
 }
 
@@ -432,14 +434,14 @@ void FiducialsNode::imageCallback(const sensor_msgs::msg::Image::ConstSharedPtr 
                     ts.header.frame_id = frameId;
                     ts.header.stamp = msg->header.stamp;
                     ts.child_frame_id = "fiducial_" + std::to_string(ft.fiducial_id);
-                    broadcaster.sendTransform(ts);
+                    broadcaster->sendTransform(ts);
                 }
             }
             pose_pub->publish(fta);
         }
 
         if (publish_images) {
-	    image_pub.publish(cv_ptr->toImageMsg());
+	    //image_pub.publish(cv_ptr->toImageMsg());
         }
     }
     catch(cv_bridge::Exception & e) {
@@ -483,26 +485,35 @@ void FiducialsNode::handleIgnoreString(const std::string& str)
     }
 }
 
-bool FiducialsNode::enableDetectionsCallback(const std_srvs::srv::SetBool::Request &req,
-                                             std_srvs::srv::SetBool::Response &res)
+bool FiducialsNode::enableDetectionsCallback(const std_srvs::srv::SetBool::Request::SharedPtr req,
+                                             std_srvs::srv::SetBool::Response::SharedPtr res)
 {
-    enable_detections = req.data;
+    enable_detections = req->data;
     if (enable_detections){
-        res.message = "Enabled aruco detections.";
+        res->message = "Enabled aruco detections.";
         RCLCPP_INFO(nh->get_logger(), "Enabled aruco detections.");
     }
     else {
-        res.message = "Disabled aruco detections.";
+        res->message = "Disabled aruco detections.";
         RCLCPP_INFO(nh->get_logger(), "Disabled aruco detections.");
     }
     
-    res.success = true;
+    res->success = true;
     return true;
 }
 
 
-FiducialsNode::FiducialsNode() : it(nh), broadcaster(nh)
+FiducialsNode::FiducialsNode()
 {
+    std::cerr << "CTOR\n";
+
+    nh = std::make_shared<rclcpp::Node>("fiducials_node");
+
+    RCLCPP_INFO(nh->get_logger(), "Start");
+
+    broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(nh);
+    img_trans = std::make_shared<image_transport::ImageTransport>(nh);
+
     frameNum = 0;
 
     // Camera intrinsics
@@ -518,23 +529,23 @@ FiducialsNode::FiducialsNode() : it(nh), broadcaster(nh)
 
     detectorParams = new aruco::DetectorParameters();
 
-    pnh->get_parameter_or("publish_images", publish_images, false);
-    pnh->get_parameter_or("fiducial_len", fiducial_len, 0.14);
-    pnh->get_parameter_or("dictionary", dicno, 7);
-    pnh->get_parameter_or("do_pose_estimation", doPoseEstimation, true);
-    pnh->get_parameter_or("publish_fiducial_tf", publishFiducialTf, true);
+    nh->get_parameter_or("publish_images", publish_images, false);
+    nh->get_parameter_or("fiducial_len", fiducial_len, 0.14);
+    nh->get_parameter_or("dictionary", dicno, 7);
+    nh->get_parameter_or("do_pose_estimation", doPoseEstimation, true);
+    nh->get_parameter_or("publish_fiducial_tf", publishFiducialTf, true);
 
     std::string str;
     std::vector<std::string> strs;
 
-    pnh->get_parameter_or("ignore_fiducials", str, std::string());
+    nh->get_parameter_or("ignore_fiducials", str, std::string());
     handleIgnoreString(str);
 
     /*
     fiducial size can take comma separated list of size: id or size: range,
     e.g. "200.0: 12, 300.0: 200-300"
     */
-    pnh->get_parameter_or("fiducial_len_override", str, std::string());
+    nh->get_parameter_or("fiducial_len_override", str, std::string());
     boost::split(strs, str, boost::is_any_of(","));
     for (const string& element : strs) {
         if (element == "") {
@@ -569,43 +580,43 @@ FiducialsNode::FiducialsNode() : it(nh), broadcaster(nh)
         }
     }
 
-    image_pub = it.advertise("/fiducial_images", 1);
+    image_pub = img_trans->advertise("/fiducial_images", 1);
 
-    //vertices_pub = new ros::Publisher(nh.advertise<fiducial_msgs::FiducialArray>("fiducial_vertices", 1));
+    vertices_pub = nh->create_publisher<fiducial_msgs::msg::FiducialArray>("fiducial_vertices", 1);
 
-    //pose_pub = new ros::Publisher(nh.advertise<fiducial_msgs::FiducialTransformArray>("fiducial_transforms", 1));
+    pose_pub = nh->create_publisher<fiducial_msgs::msg::FiducialTransformArray>("fiducial_transforms", 1);
 
     dictionary = aruco::getPredefinedDictionary(dicno);
 
-    //img_sub = it.subscribe("camera", 1,
-    //                     &FiducialsNode::imageCallback, this);
+    img_sub = img_trans->subscribe("camera", 1,
+                           &FiducialsNode::imageCallback, this);
 
     caminfo_sub = nh->create_subscription<sensor_msgs::msg::CameraInfo>("camera_info", 1,
                      std::bind(&FiducialsNode::camInfoCallback, this, std::placeholders::_1));
 
-    // ignore_sub = nh.create_subscription<std_msgs::msg::String>("ignore_fiducials", 1,
-    //                                     std::bind(&FiducialsNode::ignoreCallback, this, std::placeholders::_1));
+    ignore_sub = nh->create_subscription<std_msgs::msg::String>("ignore_fiducials", 1,
+                                         std::bind(&FiducialsNode::ignoreCallback, this, std::placeholders::_1));
 
-    //service_enable_detections = nh.create_service("enable_detections", &FiducialsNode::enableDetectionsCallback);
+    service_enable_detections = nh->create_service<std_srvs::srv::SetBool>("enable_detections", std::bind(&FiducialsNode::enableDetectionsCallback, this, std::placeholders::_1, std::placeholders::_2));
 
     //callbackType = boost::bind(&FiducialsNode::configCallback, this, _1, _2); // TODO migrate to ROS2
     //configServer.setCallback(callbackType); // TODO migrate to ROS2
 
-    pnh->get_parameter_or("adaptiveThreshConstant", detectorParams->adaptiveThreshConstant, 7.0);
-    pnh->get_parameter_or("adaptiveThreshWinSizeMax", detectorParams->adaptiveThreshWinSizeMax, 53); /* defailt 23 */
-    pnh->get_parameter_or("adaptiveThreshWinSizeMin", detectorParams->adaptiveThreshWinSizeMin, 3);
-    pnh->get_parameter_or("adaptiveThreshWinSizeStep", detectorParams->adaptiveThreshWinSizeStep, 4); /* default 10 */
-    pnh->get_parameter_or("cornerRefinementMaxIterations", detectorParams->cornerRefinementMaxIterations, 30);
-    pnh->get_parameter_or("cornerRefinementMinAccuracy", detectorParams->cornerRefinementMinAccuracy, 0.01); /* default 0.1 */
-    pnh->get_parameter_or("cornerRefinementWinSize", detectorParams->cornerRefinementWinSize, 5);
+    nh->get_parameter_or("adaptiveThreshConstant", detectorParams->adaptiveThreshConstant, 7.0);
+    nh->get_parameter_or("adaptiveThreshWinSizeMax", detectorParams->adaptiveThreshWinSizeMax, 53); /* defailt 23 */
+    nh->get_parameter_or("adaptiveThreshWinSizeMin", detectorParams->adaptiveThreshWinSizeMin, 3);
+    nh->get_parameter_or("adaptiveThreshWinSizeStep", detectorParams->adaptiveThreshWinSizeStep, 4); /* default 10 */
+    nh->get_parameter_or("cornerRefinementMaxIterations", detectorParams->cornerRefinementMaxIterations, 30);
+    nh->get_parameter_or("cornerRefinementMinAccuracy", detectorParams->cornerRefinementMinAccuracy, 0.01); /* default 0.1 */
+    nh->get_parameter_or("cornerRefinementWinSize", detectorParams->cornerRefinementWinSize, 5);
 #if CV_MINOR_VERSION==2 and CV_MAJOR_VERSION==3
-    pnh->get_parameter_or("doCornerRefinement",detectorParams->doCornerRefinement, true); /* default false */
+    nh->get_parameter_or("doCornerRefinement",detectorParams->doCornerRefinement, true); /* default false */
 #else
     bool doCornerRefinement = true;
-    pnh->get_parameter_or("doCornerRefinement", doCornerRefinement, true);
+    nh->get_parameter_or("doCornerRefinement", doCornerRefinement, true);
     if (doCornerRefinement) {
        bool cornerRefinementSubPix = true;
-       pnh->get_parameter_or("cornerRefinementSubPix", cornerRefinementSubPix, true);
+       nh->get_parameter_or("cornerRefinementSubPix", cornerRefinementSubPix, true);
        if (cornerRefinementSubPix) {
          detectorParams->cornerRefinementMethod = aruco::CORNER_REFINE_SUBPIX;
        }
@@ -617,28 +628,36 @@ FiducialsNode::FiducialsNode() : it(nh), broadcaster(nh)
        detectorParams->cornerRefinementMethod = aruco::CORNER_REFINE_NONE;
     }
 #endif
-    pnh->get_parameter_or("errorCorrectionRate", detectorParams->errorCorrectionRate , 0.6);
-    pnh->get_parameter_or("minCornerDistanceRate", detectorParams->minCornerDistanceRate , 0.05);
-    pnh->get_parameter_or("markerBorderBits", detectorParams->markerBorderBits, 1);
-    pnh->get_parameter_or("maxErroneousBitsInBorderRate", detectorParams->maxErroneousBitsInBorderRate, 0.04);
-    pnh->get_parameter_or("minDistanceToBorder", detectorParams->minDistanceToBorder, 3);
-    pnh->get_parameter_or("minMarkerDistanceRate", detectorParams->minMarkerDistanceRate, 0.05);
-    pnh->get_parameter_or("minMarkerPerimeterRate", detectorParams->minMarkerPerimeterRate, 0.1); /* default 0.3 */
-    pnh->get_parameter_or("maxMarkerPerimeterRate", detectorParams->maxMarkerPerimeterRate, 4.0);
-    pnh->get_parameter_or("minOtsuStdDev", detectorParams->minOtsuStdDev, 5.0);
-    pnh->get_parameter_or("perspectiveRemoveIgnoredMarginPerCell", detectorParams->perspectiveRemoveIgnoredMarginPerCell, 0.13);
-    pnh->get_parameter_or("perspectiveRemovePixelPerCell", detectorParams->perspectiveRemovePixelPerCell, 8);
-    pnh->get_parameter_or("polygonalApproxAccuracyRate", detectorParams->polygonalApproxAccuracyRate, 0.01); /* default 0.05 */
+    nh->get_parameter_or("errorCorrectionRate", detectorParams->errorCorrectionRate , 0.6);
+    nh->get_parameter_or("minCornerDistanceRate", detectorParams->minCornerDistanceRate , 0.05);
+    nh->get_parameter_or("markerBorderBits", detectorParams->markerBorderBits, 1);
+    nh->get_parameter_or("maxErroneousBitsInBorderRate", detectorParams->maxErroneousBitsInBorderRate, 0.04);
+    nh->get_parameter_or("minDistanceToBorder", detectorParams->minDistanceToBorder, 3);
+    nh->get_parameter_or("minMarkerDistanceRate", detectorParams->minMarkerDistanceRate, 0.05);
+    nh->get_parameter_or("minMarkerPerimeterRate", detectorParams->minMarkerPerimeterRate, 0.1); /* default 0.3 */
+    nh->get_parameter_or("maxMarkerPerimeterRate", detectorParams->maxMarkerPerimeterRate, 4.0);
+    nh->get_parameter_or("minOtsuStdDev", detectorParams->minOtsuStdDev, 5.0);
+    nh->get_parameter_or("perspectiveRemoveIgnoredMarginPerCell", detectorParams->perspectiveRemoveIgnoredMarginPerCell, 0.13);
+    nh->get_parameter_or("perspectiveRemovePixelPerCell", detectorParams->perspectiveRemovePixelPerCell, 8);
+    nh->get_parameter_or("polygonalApproxAccuracyRate", detectorParams->polygonalApproxAccuracyRate, 0.01); /* default 0.05 */
 
     RCLCPP_INFO(nh->get_logger(), "Aruco detection ready");
 }
 
 int main(int argc, char ** argv) {
-    // ros::init(argc, argv, "aruco_detect"); // TODO ROS2 migrate
-
-    FiducialsNode* node = new FiducialsNode();
-
-    // ros::spin(); //TODO ROS2 migrate
+    std::cerr << "Before init\n";
+    rclcpp::init(argc, argv);
+    std::cerr << "After init\n";
+    auto node = std::make_shared<FiducialsNode>();
+    std::cerr << "Node constructed\n";
+    while(rclcpp::ok())
+    {
+        rclcpp::spin_some(node->nh);
+    }
+    
+    std::cerr << "After spin\n";
+    rclcpp::shutdown();
+    
 
     return 0;
 }

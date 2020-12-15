@@ -58,6 +58,10 @@ ament_target_dependencies(aruco_detect ${DEPENDENCIES} OpenCV)
 ## Install ##
 #############
 
+install(TARGETS aruco_detect
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ## Mark executables and/or libraries for installation
 # install(TARGETS aruco_detect
 #    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
