@@ -15,6 +15,13 @@ ros2 launch aruco_detect aruco_detect.launch.py
 ```
 
 Check images in rviz with
+```
+ros2 run rviz2 rviz2 -d src/fiducials/rviz_fiducials_config.rviz
+```
+
+## Pitfalls
+- For some reason the default subscription QoS of is default not sensor. Due to this one has to make sure the image is send with a compatible profile. See https://github.com/ros-perception/image_common/issues/156
+
 ## Done
 - [x] Migrate launch file
 
