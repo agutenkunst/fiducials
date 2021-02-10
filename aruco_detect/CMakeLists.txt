@@ -62,6 +62,10 @@ install(TARGETS aruco_detect
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
 ## Mark executables and/or libraries for installation
 # install(TARGETS aruco_detect
 #    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
