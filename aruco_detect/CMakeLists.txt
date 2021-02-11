@@ -73,9 +73,9 @@ install(DIRECTORY launch
 #    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 # )
 
-# catkin_install_python(PROGRAMS scripts/create_markers.py
-#         DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
+install(PROGRAMS scripts/create_markers.py
+        DESTINATION lib/${PROJECT_NAME}
+)
 # install(DIRECTORY launch/
 #         DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
 # ) 

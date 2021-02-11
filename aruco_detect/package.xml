@@ -24,9 +24,8 @@
   <depend>geometry_msgs</depend>
   <!--<depend>dynamic_reconfigure</depend>-->
   
-  <!-- Dont port this right now TODO -->
-  <!-- <depend>python-cairosvg</depend>-->
-  <!-- <depend>python-joblib</depend>-->
+  <!-- <depend>python-cairosvg</depend> Installed via pip3 install cairosvg -->
+  <depend>python-joblib</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
