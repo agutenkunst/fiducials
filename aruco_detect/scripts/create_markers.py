@@ -19,6 +19,8 @@ else:
     print("ERROR: could not find module em, please sudo apt install python-empy")
     exit(2)
 
+
+# TODO Needs `python3 -m pip install opencv-contrib-python` on Ubuntu 20
 import cv2
 import cv2.aruco as aruco
 
@@ -101,7 +103,7 @@ def genMarker(i, dicno, paper_size):
 
 if __name__ == "__main__":
     checkCmd("pdfunite", "poppler-utils")
-    checkCmd("cairosvg", "python-cairosvg")
+    #checkCmd("cairosvg", "python-cairosvg")
 
 
     parser = argparse.ArgumentParser(description='Generate Aruco Markers.')

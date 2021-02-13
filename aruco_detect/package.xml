@@ -25,7 +25,7 @@
   <!--<depend>dynamic_reconfigure</depend>-->
   
   <!-- <depend>python-cairosvg</depend> Installed via pip3 install cairosvg -->
-  <depend>python-joblib</depend>
+  <depend>python-joblib</depend> <!-- TODO Manually needed to install apt python3-joblib -->
 
   <export>
     <build_type>ament_cmake</build_type>
