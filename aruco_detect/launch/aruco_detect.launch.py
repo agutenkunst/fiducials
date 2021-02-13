@@ -5,7 +5,7 @@ from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('camera', default_value='/camera_ns'),
+        DeclareLaunchArgument('camera', default_value='/camera'),
         DeclareLaunchArgument('image', default_value='image'),
         DeclareLaunchArgument('transport', default_value='compressed'),
         DeclareLaunchArgument('fiducial_len', default_value='0.14'),

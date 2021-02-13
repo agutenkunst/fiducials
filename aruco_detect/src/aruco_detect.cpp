@@ -606,11 +606,11 @@ FiducialsNode::FiducialsNode()
 
     dictionary = aruco::getPredefinedDictionary(dicno);
 
-    img_sub = img_trans->subscribe("/camera_ns/image", 1,
+    img_sub = img_trans->subscribe("/camera/image", 1,
                            &FiducialsNode::imageCallback, this);
 
 
-    caminfo_sub = nh->create_subscription<sensor_msgs::msg::CameraInfo>("/camera_ns/camera_info", 1,
+    caminfo_sub = nh->create_subscription<sensor_msgs::msg::CameraInfo>("/camera/camera_info", 1,
                      std::bind(&FiducialsNode::camInfoCallback, this, std::placeholders::_1));
 
     ignore_sub = nh->create_subscription<std_msgs::msg::String>("ignore_fiducials", 1,
