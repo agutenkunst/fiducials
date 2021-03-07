@@ -13,9 +13,9 @@ Still a bit fuzzy with the correct deps
 ros2 run aruco_detect create_markers.py 101 102 foo.pdf
 ```
 
-### Perform detection
+### Perform detection using USB camera
 
-With https://github.com/agutenkunst/ros2_usb_camera/tree/fiducials_migration
+With `git clone -b bad_patch_do_not_merge git@github.com:agutenkunst/ros2_usb_camera.git`
 
 (check that corrected calibration file is attached)
 ```
@@ -24,8 +24,9 @@ ros2 launch usb_camera_driver usb_camera_node.launch.py
 Note: Just using some "valid" calibration data
 
 
+Start detection with
 ```
-ros2 launch usb_camera_driver usb_camera_node.launch.py
+ros2 launch aruco_detect aruco_detect.launch.py
 ```
 
 Check images in rviz with
