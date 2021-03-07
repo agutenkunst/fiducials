@@ -36,27 +36,18 @@
 #include <tf2/LinearMath/Vector3.h>
 #include <string>
 
-#include <std_msgs/ColorRGBA.h>
-#include <std_msgs/String.h>
+#include <std_msgs/msg/color_rgba.hpp>
+#include <std_msgs/msg/string.hpp>
 
-#include <geometry_msgs/Point.h>
-#include <geometry_msgs/PoseWithCovarianceStamped.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <visualization_msgs/Marker.h>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 
 #include <boost/filesystem.hpp>
 
 
 static double systematic_error = 0.01;
-
-// Constructor for observation
-Observation::Observation(int fid, const tf2::Stamped<TransformWithVariance> &camFid) {
-    this->fid = fid;
-
-    T_camFid = camFid;
-    T_fidCam = T_camFid;
-    T_fidCam.transform = T_camFid.transform.inverse();
-}
 
 // Update a fiducial position in map with a new estimate
 void Fiducial::update(const tf2::Stamped<TransformWithVariance> &newPose) {
@@ -68,7 +59,7 @@ void Fiducial::update(const tf2::Stamped<TransformWithVariance> &newPose) {
 Fiducial::Fiducial(int id, const tf2::Stamped<TransformWithVariance> &pose) {
     this->id = id;
     this->pose = pose;
-    this->lastPublished = ros::Time(0);
+    this->lastPublished = rclcpp::Time(0);
     this->numObs = 0;
     this->visible = false;
 }
@@ -149,7 +140,7 @@ Map::Map(ros::NodeHandle &nh) : tfBuffer(ros::Duration(30.0)) {
 
 // Update map with a set of observations
 
-void Map::update(std::vector<Observation> &obs, const ros::Time &time) {
+void Map::update(std::vector<Observation> &obs, const rclcpp::Time &time) {
     ROS_INFO("Updating map with %d observations. Map has %d fiducials", (int)obs.size(),
              (int)fiducials.size());
 
@@ -178,7 +169,7 @@ void Map::update(std::vector<Observation> &obs, const ros::Time &time) {
 // update estimates of observed fiducials from previously estimated
 // camera pose
 
-void Map::updateMap(const std::vector<Observation> &obs, const ros::Time &time,
+void Map::updateMap(const std::vector<Observation> &obs, const rclcpp::Time &time,
                     const tf2::Stamped<TransformWithVariance> &T_mapCam) {
     for (auto &map_pair : fiducials) {
         Fiducial &f = map_pair.second;
@@ -226,9 +217,9 @@ void Map::updateMap(const std::vector<Observation> &obs, const ros::Time &time,
 
 // lookup specified transform
 
-bool Map::lookupTransform(const std::string &from, const std::string &to, const ros::Time &time,
+bool Map::lookupTransform(const std::string &from, const std::string &to, const rclcpp::Time &time,
                           tf2::Transform &T) const {
-    geometry_msgs::TransformStamped transform;
+    geometry_msgs::msg::TransformStamped transform;
 
     try {
         transform = tfBuffer.lookupTransform(from, to, time, ros::Duration(0.5));
@@ -244,7 +235,7 @@ bool Map::lookupTransform(const std::string &from, const std::string &to, const 
 // update pose estimate of robot.  We combine the camera->base_link
 // tf to each estimate so we can evaluate how good they are.  A good
 // estimate would have z == roll == pitch == 0.
-int Map::updatePose(std::vector<Observation> &obs, const ros::Time &time,
+int Map::updatePose(std::vector<Observation> &obs, const rclcpp::Time &time,
                     tf2::Stamped<TransformWithVariance> &T_mapCam) {
     int numEsts = 0;
     tf2::Stamped<TransformWithVariance> T_camBase;
@@ -393,7 +384,7 @@ int Map::updatePose(std::vector<Observation> &obs, const ros::Time &time,
 // Publish map -> odom tf
 
 void Map::publishTf() {
-    tfPublishTime = ros::Time::now();
+    tfPublishTime = rclcpp::Time::now();
     poseTf.header.stamp = tfPublishTime + ros::Duration(future_date_transforms);
     broadcaster.sendTransform(poseTf);
 }
@@ -401,7 +392,7 @@ void Map::publishTf() {
 // publish latest tf if enough time has elapsed
 
 void Map::update() {
-    ros::Time now = ros::Time::now();
+    rclcpp::Time now = rclcpp::Time::now();
     if (publishPoseTf && havePose && tfPublishInterval != 0.0 &&
         (now - tfPublishTime).toSec() > tfPublishInterval) {
         publishTf();
@@ -433,7 +424,7 @@ static int findClosestObs(const std::vector<Observation> &obs) {
 // pose of that marker such that base_link is at the origin of the
 // map frame
 
-void Map::autoInit(const std::vector<Observation> &obs, const ros::Time &time) {
+void Map::autoInit(const std::vector<Observation> &obs, const rclcpp::Time &time) {
     ROS_INFO("Auto init map %d", frameNum);
 
     tf2::Transform T_baseCam;
@@ -515,7 +506,7 @@ void Map::handleAddFiducial(const std::vector<Observation> &obs) {
 
             // Take into account position of robot in the world if known
             tf2::Transform T_mapBase;
-            if (lookupTransform(mapFrame, baseFrame, ros::Time(0), T_mapBase)) {
+            if (lookupTransform(mapFrame, baseFrame, rclcpp::Time(0), T_mapBase)) {
                 T.setData(T_mapBase * T);
             }
             else {
@@ -602,7 +593,7 @@ bool Map::loadMap(std::string filename) {
             auto twv = TransformWithVariance(tvec, q, var);
             // TODO: figure out what the timestamp in Fiducial should be
             Fiducial f =
-                Fiducial(id, tf2::Stamped<TransformWithVariance>(twv, ros::Time::now(), mapFrame));
+                Fiducial(id, tf2::Stamped<TransformWithVariance>(twv, rclcpp::Time::now(), mapFrame));
             f.numObs = numObs;
 
             std::istringstream ss(linkbuf);
@@ -657,7 +648,7 @@ void Map::publishMap() {
 // published recently
 
 void Map::publishMarkers() {
-    ros::Time now = ros::Time::now();
+    rclcpp::Time now = rclcpp::Time::now();
     std::map<int, Fiducial>::iterator it;
 
     for (auto &map_pair : fiducials) {
@@ -671,7 +662,7 @@ void Map::publishMarkers() {
 // Publish visualization messages for a single fiducial
 
 void Map::publishMarker(Fiducial &fid) {
-    fid.lastPublished = ros::Time::now();
+    fid.lastPublished = rclcpp::Time::now();
 
     // Flattened cube
     visualization_msgs::Marker marker;

@@ -36,21 +36,25 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <ros/ros.h>
-#include <tf/transform_datatypes.h>
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/subscription.hpp>
+
+#include <tf2/transform_datatypes.h>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/buffer.h>
+#include <tf2_ros/buffer_interface.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
-#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/msg/marker.hpp>
 
-#include "fiducial_msgs/Fiducial.h"
-#include "fiducial_msgs/FiducialArray.h"
-#include "fiducial_msgs/FiducialTransform.h"
-#include "fiducial_msgs/FiducialTransformArray.h"
+#include "fiducial_msgs/msg/fiducial.hpp"
+#include "fiducial_msgs/msg/fiducial_array.hpp"
+#include "fiducial_msgs/msg/fiducial_transform.hpp"
+#include "fiducial_msgs/msg/fiducial_transform_array.hpp"
 
-#include "fiducial_slam/map.h"
+//#include "fiducial_slam/map.h"
+#include <fiducial_slam/observation.h>
 
 #include <opencv2/calib3d.hpp>
 #include <opencv2/highgui.hpp>
@@ -63,27 +67,23 @@ using namespace cv;
 
 class FiducialSlam {
 private:
-    ros::Subscriber ft_sub;
-
-    ros::Subscriber verticesSub;
-    ros::Subscriber cameraInfoSub;
-    ros::Publisher ftPub;
+    rclcpp::Subscription<fiducial_msgs::msg::FiducialTransformArray>::SharedPtr ft_sub;
 
     bool use_fiducial_area_as_weight;
     double weighting_scale;
 
-    void transformCallback(const fiducial_msgs::FiducialTransformArray::ConstPtr &msg);
+    void transformCallback(const fiducial_msgs::msg::FiducialTransformArray::SharedPtr msg);
 
 public:
-    Map fiducialMap;
-    FiducialSlam(ros::NodeHandle &nh);
+    //Map fiducialMap;
+    FiducialSlam(rclcpp::Node::SharedPtr &nh);
 };
 
-void FiducialSlam::transformCallback(const fiducial_msgs::FiducialTransformArray::ConstPtr &msg) {
+void FiducialSlam::transformCallback(const fiducial_msgs::msg::FiducialTransformArray::SharedPtr msg) {
     vector<Observation> observations;
 
     for (size_t i = 0; i < msg->transforms.size(); i++) {
-        const fiducial_msgs::FiducialTransform &ft = msg->transforms[i];
+        const fiducial_msgs::msg::FiducialTransform &ft = msg->transforms[i];
 
         tf2::Vector3 tvec(ft.transform.translation.x, ft.transform.translation.y,
                           ft.transform.translation.z);
@@ -100,61 +100,54 @@ void FiducialSlam::transformCallback(const fiducial_msgs::FiducialTransformArray
 
         Observation obs(ft.fiducial_id, tf2::Stamped<TransformWithVariance>(
                                             TransformWithVariance(ft.transform, variance),
-                                            msg->header.stamp, msg->header.frame_id));
+                                            tf2_ros::fromMsg(msg->header.stamp), msg->header.frame_id));
         observations.push_back(obs);
     }
 
-    fiducialMap.update(observations, msg->header.stamp);
+    // fiducialMap.update(observations, msg->header.stamp); // TODO ROS2PORT reintegrate
 }
 
-FiducialSlam::FiducialSlam(ros::NodeHandle &nh) : fiducialMap(nh) {
-    bool doPoseEstimation;
+FiducialSlam::FiducialSlam(rclcpp::Node::SharedPtr &nh)
+    //: fiducialMap(nh)
+{
 
     // If set, use the fiducial area in pixels^2 as an indication of the
     // 'goodness' of it. This will favor fiducials that are close to the
     // camera and center of the image. The reciprical of the area is actually
     // used, in place of reprojection error as the estimate's variance
-    nh.param<bool>("use_fiducial_area_as_weight", use_fiducial_area_as_weight, false);
+    use_fiducial_area_as_weight = nh->declare_parameter("use_fiducial_area_as_weight", false);
     // Scaling factor for weighing
-    nh.param<double>("weighting_scale", weighting_scale, 1e9);
+    weighting_scale = nh->declare_parameter("weighting_scale", 1e9);
 
-    nh.param("do_pose_estimation", doPoseEstimation, false);
+    ft_sub = nh->create_subscription<fiducial_msgs::msg::FiducialTransformArray>("/fiducial_transforms", 1,
+                     std::bind(&FiducialSlam::transformCallback, this, std::placeholders::_1));
 
-    if (doPoseEstimation) {
-        double fiducialLen, errorThreshold;
-        nh.param<double>("fiducial_len", fiducialLen, 0.14);
-        nh.param<double>("pose_error_theshold", errorThreshold, 1.0);
-
-        ftPub = ros::Publisher(
-            nh.advertise<fiducial_msgs::FiducialTransformArray>("/fiducial_transforms", 1));
-    } else {
-        ft_sub = nh.subscribe("/fiducial_transforms", 1, &FiducialSlam::transformCallback, this);
-    }
-
-    ROS_INFO("Fiducial Slam ready");
+    RCLCPP_INFO(nh->get_logger(), "Fiducial Slam ready");
 }
 
-auto node = unique_ptr<FiducialSlam>(nullptr);
+//auto node = unique_ptr<FiducialSlam>(nullptr);
 
-void mySigintHandler(int sig) {
-    if (node != nullptr) node->fiducialMap.saveMap();
+// void mySigintHandler(int sig) { //TODO ROS2PORT
+//     //if (node != nullptr) node->fiducialMap.saveMap(); // TODO ROS2PORT
 
-    ros::shutdown();
-}
+//     rclcpp::shutdown();
+// }
 
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "fiducial_slam", ros::init_options::NoSigintHandler);
-    ros::NodeHandle nh("~");
+    rclcpp::init(argc, argv);
+    auto nh = rclcpp::Node::make_shared("fiducial_slam");
 
-    node = make_unique<FiducialSlam>(nh);
-    signal(SIGINT, mySigintHandler);
+    auto node = std::make_unique<FiducialSlam>(nh);
+    //signal(SIGINT, mySigintHandler); // TODO ROS2PORT
 
-    ros::Rate r(20);
-    while (ros::ok()) {
-        ros::spinOnce();
+    rclcpp::Rate r(20);
+    while (rclcpp::ok()) {
+        rclcpp::spin_some(nh);
         r.sleep();
-        node->fiducialMap.update();
+        //node->fiducialMap.update(); // TODO ROS2PORT
     }
+
+    rclcpp::shutdown();
 
     return 0;
 }

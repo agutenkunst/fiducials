@@ -21,9 +21,10 @@ set(msg_files
   "msg/FiducialMapEntryArray.msg"
 )
 
-#set(srv_files
-#  "srv/InitializeMap.srv"
-#)
+set(srv_files
+  "srv/InitializeMap.srv"
+  "srv/AddFiducial.srv"
+)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
